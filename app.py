@@ -746,6 +746,34 @@ class CheckinScheduler:
             self.scheduler_thread.join(timeout=5)
         logger.info("Scheduler stopped")
 
+    def perform_startup_checkin(self):
+        """应用启动时执行签到"""
+        logger.info("Performing startup checkin for all enabled accounts...")
+        accounts = config_manager.get_accounts(enabled_only=True)
+
+        for account in accounts:
+            account_id = account['id']
+            # 检查今天是否已签到
+            today_records = history_manager.get_today_records()
+            already_checked = any(
+                r['account_id'] == account_id and r['success']
+                for r in today_records
+            )
+
+            if not already_checked:
+                logger.info(f"Startup checkin for account: {account['name']}")
+                threading.Thread(
+                    target=self.perform_checkin,
+                    args=(account_id,),
+                    daemon=True
+                ).start()
+                # 添加小延迟避免并发请求过多
+                time.sleep(2)
+            else:
+                logger.info(f"Account {account['name']} already checked in today, skipping")
+
+        logger.info("Startup checkin completed")
+
     def _run_scheduler(self):
         """调度器主循环"""
         while self.running:
@@ -1608,6 +1636,8 @@ HTML_TEMPLATE = '''
 if __name__ == '__main__':
     try:
         scheduler.start()
+        # 启动时执行签到
+        scheduler.perform_startup_checkin()
         logger.info(f"Starting Leaflow Control Panel on port {PORT}")
         logger.info(f"Config directory: {CONFIG_DIR}")
         logger.info(f"Admin username: {ADMIN_USERNAME}")
