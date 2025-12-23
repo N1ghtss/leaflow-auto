@@ -761,13 +761,11 @@ class CheckinScheduler:
                     try:
                         account_id = account['id']
 
-                        # 检查今天是否已经签到
-                        last_checkin_date = account.get('last_checkin_date')
-                        if last_checkin_date:
-                            if isinstance(last_checkin_date, str):
-                                last_checkin_date = datetime.strptime(last_checkin_date, '%Y-%m-%d').date()
-                            if last_checkin_date == current_date:
-                                continue
+                        # 检查今天是否已经签到（通过内存记录）
+                        today_records = history_manager.get_today_records()
+                        already_checked = any(r['account_id'] == account_id and r['success'] for r in today_records)
+                        if already_checked:
+                            continue
 
                         # 获取签到时间范围
                         start_time_str = account.get('checkin_time_start', '06:30')
@@ -885,12 +883,6 @@ class CheckinScheduler:
                 message=message,
                 retry_times=retry_attempt
             )
-
-            # 更新最后签到日期
-            if success:
-                config_manager.update_account(account_id, {
-                    'last_checkin_date': current_date.isoformat()
-                })
 
             logger.info(f"Check-in for {account['name']}: {'Success' if success else 'Failed'} - {message}")
 
@@ -1020,107 +1012,22 @@ def get_accounts():
 @app.route('/api/accounts', methods=['POST'])
 @token_required
 def add_account():
-    """Add a new account"""
-    try:
-        data = request.get_json()
-        name = data.get('name')
-        cookie_input = data.get('token_data', data.get('cookie_data', ''))
-        checkin_time_start = data.get('checkin_time_start', '06:30')
-        checkin_time_end = data.get('checkin_time_end', '06:40')
-        check_interval = data.get('check_interval', 60)
-        retry_count = data.get('retry_count', 2)
-
-        if not name or not cookie_input:
-            return jsonify({'message': 'Name and cookie data are required'}), 400
-
-        # Check if name already exists
-        existing = config_manager.get_accounts()
-        if any(acc['name'] == name for acc in existing):
-            return jsonify({'message': 'Account name already exists'}), 400
-
-        # Parse cookie input
-        if isinstance(cookie_input, str):
-            token_data = parse_cookie_string(cookie_input)
-        else:
-            token_data = cookie_input
-
-        account_id = config_manager.add_account({
-            'name': name,
-            'token_data': token_data,
-            'checkin_time_start': checkin_time_start,
-            'checkin_time_end': checkin_time_end,
-            'check_interval': check_interval,
-            'retry_count': retry_count
-        })
-
-        return jsonify({'message': 'Account added successfully', 'id': account_id})
-
-    except ValueError as e:
-        return jsonify({'message': f'Invalid cookie format: {str(e)}'}), 400
-    except Exception as e:
-        logger.error(f"Add account error: {e}")
-        return jsonify({'message': f'Error: {str(e)}'}), 400
+    """Add a new account - disabled, config file is read-only"""
+    return jsonify({'message': '账号管理功能已禁用，请手动编辑配置文件'}), 403
 
 
 @app.route('/api/accounts/<int:account_id>', methods=['PUT'])
 @token_required
 def update_account(account_id):
-    """Update an account"""
-    try:
-        data = request.get_json()
-
-        updates = {}
-
-        if 'enabled' in data:
-            updates['enabled'] = bool(data['enabled'])
-
-        if 'checkin_time_start' in data:
-            updates['checkin_time_start'] = data['checkin_time_start']
-
-        if 'checkin_time_end' in data:
-            updates['checkin_time_end'] = data['checkin_time_end']
-
-        if 'check_interval' in data:
-            updates['check_interval'] = int(data['check_interval'])
-
-        if 'retry_count' in data:
-            updates['retry_count'] = int(data['retry_count'])
-
-        if 'token_data' in data or 'cookie_data' in data:
-            cookie_input = data.get('token_data', data.get('cookie_data', ''))
-            if isinstance(cookie_input, str):
-                token_data = parse_cookie_string(cookie_input)
-            else:
-                token_data = cookie_input
-            updates['token_data'] = token_data
-
-        if updates:
-            success = config_manager.update_account(account_id, updates)
-            if success:
-                return jsonify({'message': 'Account updated successfully'})
-            else:
-                return jsonify({'message': 'Account not found'}), 404
-
-        return jsonify({'message': 'No updates provided'}), 400
-
-    except Exception as e:
-        logger.error(f"Update account error: {e}")
-        return jsonify({'message': f'Error: {str(e)}'}), 400
+    """Update an account - disabled, config file is read-only"""
+    return jsonify({'message': '账号管理功能已禁用，请手动编辑配置文件'}), 403
 
 
 @app.route('/api/accounts/<int:account_id>', methods=['DELETE'])
 @token_required
 def delete_account(account_id):
-    """Delete an account"""
-    try:
-        success = config_manager.delete_account(account_id)
-        if success:
-            return jsonify({'message': 'Account deleted successfully'})
-        else:
-            return jsonify({'message': 'Account not found'}), 404
-    except Exception as e:
-        logger.error(f"Delete account error: {e}")
-        return jsonify({'message': f'Error: {str(e)}'}), 400
+    """Delete an account - disabled, config file is read-only"""
+    return jsonify({'message': '账号管理功能已禁用，请手动编辑配置文件'}), 403
 
 
 @app.route('/api/checkin/clear', methods=['POST'])
@@ -1133,19 +1040,9 @@ def clear_checkin_history():
 
         if clear_type == 'today':
             cleared = history_manager.clear_today()
-            # 重置今日的最后签到日期
-            today = datetime.now(TIMEZONE).date().isoformat()
-            accounts = config_manager.get_accounts()
-            for acc in accounts:
-                if acc.get('last_checkin_date') == today:
-                    config_manager.update_account(acc['id'], {'last_checkin_date': None})
             message = f"Today's checkin history cleared ({cleared} records)"
         elif clear_type == 'all':
             cleared = history_manager.clear_all()
-            # 重置所有最后签到日期
-            accounts = config_manager.get_accounts()
-            for acc in accounts:
-                config_manager.update_account(acc['id'], {'last_checkin_date': None})
             message = f"All checkin history cleared ({cleared} records)"
         else:
             return jsonify({'message': 'Invalid clear type'}), 400

@@ -17,11 +17,11 @@ RUN apt-get update && apt-get install -y \
 
 # Copy project files
 COPY requirements.txt .
-COPY app.py .
 
 # Install Python dependencies using Tsinghua mirror
 RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
+COPY app.py .
 # Create config directory
 RUN mkdir -p /app/config
 
