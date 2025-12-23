@@ -39,6 +39,7 @@ ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'admin123')
 PORT = int(os.getenv('PORT', '8181'))
 CONFIG_DIR = os.getenv('CONFIG_DIR', './config')
 
+
 # 设置时区为北京时间
 TIMEZONE = pytz.timezone('Asia/Shanghai')
 
